@@ -8,7 +8,7 @@ from streamlit_cookies_manager import EncryptedCookieManager
 # 1. 페이지 기본 설정 및 디자인 테마
 # =========================================================
 st.set_page_config(
-    page_title="닥터 펫: 특수 동물 가상 의료 상담소", 
+    page_title="닥터 펫: 동물 가상 의료 상담소", 
     page_icon="🦜", 
     layout="wide"
 )
@@ -98,6 +98,21 @@ st.markdown(
         border: 1px solid #79DCD0;
         background-color: #79DCD0;
         color: white;
+    }
+
+    /* 9. 로그인 및 텍스트 입력창 배경을 완전한 흰색으로 변경 */
+    .stTextInput div[data-baseweb="input"] {
+        background-color: #FFFFFF !important;
+        border-radius: 8px !important;
+        border: 1px solid #CCCCCC !important;
+    }
+    /* 입력창 클릭(포커스) 시 테두리가 민트색으로 변하게 포인트 추가 */
+    .stTextInput div[data-baseweb="input"]:focus-within {
+        border: 2px solid #79DCD0 !important;
+    }
+    .stTextInput input {
+        background-color: #FFFFFF !important;
+        color: #26403C !important;
     }
     </style>
     """,
@@ -246,7 +261,7 @@ if not st.session_state.logged_in and not st.session_state.auth_restored:
 # 5. 앱 화면 분기 (로그인 안 됨 -> 로그인 UI / 로그인 됨 -> 메인 앱 UI)
 # =========================================================
 if not st.session_state.logged_in:
-    st.markdown("<h3 style='text-align: center; margin-bottom: 15px;'>🔐 닥터 펫 로그인</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; margin-bottom: 15px; color: #26403C;'>🔐 닥터 펫 로그인</h3>", unsafe_allow_html=True)
 
     _, col_center, _ = st.columns([1, 2, 1])
 
