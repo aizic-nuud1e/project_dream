@@ -5,96 +5,7 @@ from openai import OpenAI
 from streamlit_cookies_manager import EncryptedCookieManager
 
 # =========================================================
-# 1. Pyrebase 대체 호환용 래퍼 클래스 (파이썬 3.14 및 최신 환경 호환)
-# =========================================================
-class MockValue:
-    def __init__(self, data):
-        self._data = data
-    def val(self):
-        return self._data
-
-class DatabaseRef:
-    def __init__(self, db_url, path=""):
-        self.db_url = db_url.rstrip("/")
-        self.path = path
-
-    def child(self, name):
-        new_path = f"{self.path}/{name}" if self.path else name
-        return DatabaseRef(self.db_url, new_path)
-
-    def _get_url(self):
-        return f"{self.db_url}/{self.path}.json"
-
-    def set(self, data):
-        res = requests.put(self._get_url(), json=data)
-        return res.json()
-
-    def push(self, data):
-        res = requests.post(self._get_url(), json=data)
-        return res.json()
-
-    def update(self, data):
-        res = requests.patch(self._get_url(), json=data)
-        return res.json()
-
-    def remove(self):
-        res = requests.delete(self._get_url())
-        return res.json()
-
-    def get(self):
-        res = requests.get(self._get_url())
-        data = res.json()
-        return MockValue(data)
-
-class AuthClient:
-    def __init__(self, api_key):
-        self.api_key = api_key
-
-    def sign_in_with_email_and_password(self, email, password):
-        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={self.api_key}"
-        payload = {"email": email, "password": password, "returnSecureToken": True}
-        res = requests.post(url, json=payload)
-        if res.status_code != 200:
-            raise Exception(res.json().get("error", {}).get("message", "Login failed"))
-        return res.json()
-
-    def create_user_with_email_and_password(self, email, password):
-        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signUp?key={self.api_key}"
-        payload = {"email": email, "password": password, "returnSecureToken": True}
-        res = requests.post(url, json=payload)
-        if res.status_code != 200:
-            raise Exception(res.json().get("error", {}).get("message", "Signup failed"))
-        return res.json()
-
-    def send_email_verification(self, id_token):
-        url = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={self.api_key}"
-        payload = {"requestType": "VERIFY_EMAIL", "idToken": id_token}
-        res = requests.post(url, json=payload)
-        return res.json()
-
-    def refresh(self, refresh_token):
-        url = f"https://securetoken.googleapis.com/v1/token?key={self.api_key}"
-        payload = {"grant_type": "refresh_token", "refresh_token": refresh_token}
-        res = requests.post(url, json=payload)
-        if res.status_code != 200:
-            raise Exception("Token refresh failed")
-        data = res.json()
-        return {
-            "refreshToken": data.get("refresh_token"),
-            "idToken": data.get("id_token"),
-            "userId": data.get("user_id")
-        }
-
-class PyrebaseMock:
-    def __init__(self, config):
-        self.config = config
-    def auth(self):
-        return AuthClient(self.config["apiKey"])
-    def database(self):
-        return DatabaseRef(self.config["databaseURL"])
-
-# =========================================================
-# 2. 페이지 기본 설정 및 디자인 테마
+# 1. 페이지 기본 설정 및 디자인 테마
 # =========================================================
 st.set_page_config(
     page_title="닥터 펫: 특수 동물 가상 의료 상담소", 
@@ -105,9 +16,9 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    /* 1. 전체 배경을 따뜻한 아이보리/크림 톤으로 변경 (병원 느낌) */
+    /* 1. 전체 배경: 따뜻한 살구색/베이지 톤 (병원 벽면 느낌) */
     .stApp {
-        background-color: #FCFBF7;
+        background-color: #FDF3E9;
     }
 
     /* 2. 로그인 폼 스크롤바 방지 및 여백 최적화 */
@@ -127,38 +38,66 @@ st.markdown(
         display: none !important;
     }
 
-    /* 4. 사이드바 디자인 (글씨 크기 확대 & 따뜻한 연두색 배경) */
+    /* 4. 사이드바: 접수처 데스크 느낌의 민트 톤 */
     [data-testid="stSidebar"] {
-        background-color: #F0F4EA !important; 
+        background-color: #79DCD0 !important; 
     }
     [data-testid="stSidebar"] * {
-        font-size: 1.05rem !important; /* 사이드바 기본 글씨 크기 확대 */
+        font-size: 1.05rem !important; 
+        color: #26403C !important; /* 텍스트는 가독성 좋은 짙은 청록색 */
     }
     [data-testid="stSidebar"] h1 {
-        font-size: 1.8rem !important; /* 메뉴 타이틀 크기 확대 */
+        font-size: 1.8rem !important;
+        font-weight: bold;
+        color: #1A2F2B !important;
         margin-bottom: 1rem;
     }
+    
+    /* 5. 진료 폼 & 기록장 (카드 형태의 병원 차트 느낌) */
+    div[data-testid="stForm"], div[data-testid="stExpander"] {
+        background-color: #FFFFFF;
+        border-radius: 15px;
+        padding: 20px;
+        box-shadow: 0px 4px 15px rgba(0, 0, 0, 0.05); /* 부드러운 그림자 */
+        border-top: 5px solid #79DCD0; /* 상단에 민트색 포인트 줄 */
+        margin-bottom: 20px;
+    }
 
-    /* 5. 닥터 펫 전용 텍스트 스타일 */
+    /* 6. 닥터 펫 전용 텍스트 스타일 (헤더) */
     .main-header {
         font-size: 28px;
         font-weight: bold;
-        color: #2E7D32;
+        color: #26403C;
         margin-bottom: 0px;
     }
     .sub-header {
         font-size: 16px;
-        color: #555555;
+        color: #666666;
         margin-bottom: 20px;
     }
-    
-    /* 6. 채팅 말풍선을 부드럽고 따뜻하게 */
+
+    /* 7. 채팅 말풍선 및 디자인 최적화 */
     [data-testid="stChatMessage"] {
         background-color: #FFFFFF;
         border-radius: 15px;
-        padding: 10px 20px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.04);
+        padding: 15px 20px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.04);
         margin-bottom: 15px;
+        border-left: 5px solid #79DCD0; /* 말풍선 왼쪽 민트색 포인트 */
+    }
+
+    /* 8. 버튼 스타일링 (포인트 컬러 적용) */
+    .stButton > button {
+        border-radius: 8px;
+        border: 1px solid #79DCD0;
+        color: #26403C;
+        font-weight: bold;
+        transition: all 0.3s;
+    }
+    .stButton > button:hover {
+        border: 1px solid #79DCD0;
+        background-color: #79DCD0;
+        color: white;
     }
     </style>
     """,
@@ -166,25 +105,95 @@ st.markdown(
 )
 
 # =========================================================
-# 3. Firebase 및 Upstage API 설정
+# 2. Firebase REST API 및 Upstage API 설정
 # =========================================================
-firebaseConfig = {
-    "apiKey": "AIzaSyC7EiUsz6GD807ZWLAnE7YGd7kFw2Qo1hg",
-    "authDomain": "test-c243e.firebaseapp.com",
-    "databaseURL": "https://test-c243e-default-rtdb.asia-southeast1.firebasedatabase.app",
-    "projectId": "test-c243e",
-    "storageBucket": "test-c243e.firebasestorage.app",
-    "messagingSenderId": "409449462270",
-    "appId": "1:409449462270:web:5251d05a1b16a5696c68af",
-    "measurementId": "G-CMLV3V4NVS",
-}
-
-firebase = PyrebaseMock(firebaseConfig)
-auth = firebase.auth()
-db = firebase.database()
+API_KEY = "AIzaSyC7EiUsz6GD807ZWLAnE7YGd7kFw2Qo1hg"
+DATABASE_URL = "https://test-c243e-default-rtdb.asia-southeast1.firebasedatabase.app"
 
 def sanitize_email(email):
     return email.replace(".", ",")
+
+# Pyrebase 대체용 Requests 기반 Firebase 헬퍼 클래스
+class FirebaseResponse:
+    def __init__(self, data):
+        self._data = data
+    def val(self):
+        return self._data
+
+class FirebaseAuth:
+    @staticmethod
+    def sign_in_with_email_and_password(email, password):
+        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={API_KEY}"
+        payload = {"email": email, "password": password, "returnSecureToken": True}
+        res = requests.post(url, json=payload)
+        if res.status_code == 200:
+            return res.json()
+        else:
+            raise Exception(res.json().get("error", {}).get("message", "Login failed"))
+
+    @staticmethod
+    def create_user_with_email_and_password(email, password):
+        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signUp?key={API_KEY}"
+        payload = {"email": email, "password": password, "returnSecureToken": True}
+        res = requests.post(url, json=payload)
+        if res.status_code == 200:
+            return res.json()
+        else:
+            raise Exception(res.json().get("error", {}).get("message", "Signup failed"))
+
+    @staticmethod
+    def send_email_verification(id_token):
+        url = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={API_KEY}"
+        payload = {"requestType": "VERIFY_EMAIL", "idToken": id_token}
+        res = requests.post(url, json=payload)
+        return res.json()
+
+    @staticmethod
+    def refresh(refresh_token):
+        url = f"https://securetoken.googleapis.com/v1/token?key={API_KEY}"
+        payload = {"grant_type": "refresh_token", "refresh_token": refresh_token}
+        res = requests.post(url, json=payload)
+        if res.status_code == 200:
+            data = res.json()
+            return {"refreshToken": data["refresh_token"], "idToken": data["id_token"]}
+        else:
+            raise Exception("Token refresh failed")
+
+class FirebaseDB:
+    def __init__(self, path=""):
+        self.path = path
+
+    def child(self, name):
+        new_path = f"{self.path}/{name}" if self.path else name
+        return FirebaseDB(new_path)
+
+    def set(self, data):
+        url = f"{DATABASE_URL}/{self.path}.json"
+        res = requests.put(url, json=data)
+        return res.json()
+
+    def push(self, data):
+        url = f"{DATABASE_URL}/{self.path}.json"
+        res = requests.post(url, json=data)
+        return res.json()
+
+    def update(self, data):
+        url = f"{DATABASE_URL}/{self.path}.json"
+        res = requests.patch(url, json=data)
+        return res.json()
+
+    def get(self):
+        url = f"{DATABASE_URL}/{self.path}.json"
+        res = requests.get(url)
+        return FirebaseResponse(res.json())
+
+    def remove(self):
+        url = f"{DATABASE_URL}/{self.path}.json"
+        res = requests.delete(url)
+        return res.json()
+
+db = FirebaseDB()
+auth = FirebaseAuth()
 
 UPSTAGE_API_KEY = "up_Y7OKHBUB2q7pi7C4E1ILIWItBAUOG" 
 client = OpenAI(
@@ -193,7 +202,7 @@ client = OpenAI(
 )
 
 # =========================================================
-# 4. 로그인 유지용 쿠키 매니저 설정
+# 3. 로그인 유지용 쿠키 매니저 설정
 # =========================================================
 cookies = EncryptedCookieManager(
     prefix="doctor_pet/",
@@ -203,7 +212,7 @@ if not cookies.ready():
     st.stop()
 
 # =========================================================
-# 5. 세션 상태 초기화 (+ 쿠키 기반 로그인 복원)
+# 4. 세션 상태 초기화 (+ 쿠키 기반 로그인 복원)
 # =========================================================
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -234,7 +243,7 @@ if not st.session_state.logged_in and not st.session_state.auth_restored:
             cookies.save()
 
 # =========================================================
-# 6. 앱 화면 분기 (로그인 안 됨 -> 로그인 UI / 로그인 됨 -> 메인 앱 UI)
+# 5. 앱 화면 분기 (로그인 안 됨 -> 로그인 UI / 로그인 됨 -> 메인 앱 UI)
 # =========================================================
 if not st.session_state.logged_in:
     st.markdown("<h3 style='text-align: center; margin-bottom: 15px;'>🔐 닥터 펫 로그인</h3>", unsafe_allow_html=True)
