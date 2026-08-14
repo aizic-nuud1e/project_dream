@@ -99,6 +99,21 @@ st.markdown(
         background-color: #79DCD0;
         color: white;
     }
+
+    /* 9. 로그인 및 텍스트 입력창 배경을 완전한 흰색으로 변경 */
+    .stTextInput div[data-baseweb="input"] {
+        background-color: #FFFFFF !important;
+        border-radius: 8px !important;
+        border: 1px solid #CCCCCC !important;
+    }
+    /* 입력창 클릭(포커스) 시 테두리가 민트색으로 변하게 포인트 추가 */
+    .stTextInput div[data-baseweb="input"]:focus-within {
+        border: 2px solid #79DCD0 !important;
+    }
+    .stTextInput input {
+        background-color: #FFFFFF !important;
+        color: #26403C !important;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -113,6 +128,7 @@ DATABASE_URL = "https://test-c243e-default-rtdb.asia-southeast1.firebasedatabase
 def sanitize_email(email):
     return email.replace(".", ",")
 
+# Pyrebase 대체용 Requests 기반 Firebase 헬퍼 클래스
 class FirebaseResponse:
     def __init__(self, data):
         self._data = data
@@ -245,7 +261,7 @@ if not st.session_state.logged_in and not st.session_state.auth_restored:
 # 5. 앱 화면 분기 (로그인 안 됨 -> 로그인 UI / 로그인 됨 -> 메인 앱 UI)
 # =========================================================
 if not st.session_state.logged_in:
-    st.markdown("<h3 style='text-align: center; margin-bottom: 15px;'>🔐 닥터 펫 로그인</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; margin-bottom: 15px; color: #26403C;'>🔐 닥터 펫 로그인</h3>", unsafe_allow_html=True)
 
     _, col_center, _ = st.columns([1, 2, 1])
 
@@ -418,8 +434,8 @@ else:
                 st.session_state.messages.append({"role": "assistant", "content": response})
 
     elif menu == "📅 털갈이/탈피 주기 기록 & 영양제":
-        st.markdown('<p class="main-header">📅 털갈이/탈피 주기 기록 및 관리</p>', unsafe_allow_html=True)
-        st.markdown('<p class="sub-header">우리 아이의 주기적인 신체 변화를 기록하고 관리하세요.</p>', unsafe_allow_html=True)
+        st.markdown('<p class="main-header">📅 털갈이/탈피 주기 기록 및 맞춤 케어</p>', unsafe_allow_html=True)
+        st.markdown('<p class="sub-header">우리 아이의 주기적인 신체 변화를 기록하고, 상태에 맞는 맞춤 영양제를 추천받으세요.</p>', unsafe_allow_html=True)
 
         safe_email = sanitize_email(st.session_state.user_email)
 
@@ -433,10 +449,17 @@ else:
             if submitted_log:
                 if log_status:
                     with st.spinner("기록을 안전하게 저장하는 중입니다..."):
+                        recommendation = "종합 비타민 및 미네랄 보조제"
+                        if "깃털" in log_status or "탈피" in log_status:
+                            recommendation = "단백질 및 케라틴 합성을 위한 아미노산/깃털 전용 영양제, 칼슘제"
+                        elif "기운" in log_status or "쉰" in log_status:
+                            recommendation = "면역력 강화용 유산균 및 비타민 B군"
+
                         new_log = {
                             "date": str(log_date),
                             "status": log_status,
                             "memo": log_photo_desc,
+                            "recommendation": recommendation,
                         }
                         
                         db.child("users").child(safe_email).child("care_logs").push(new_log)
@@ -478,10 +501,17 @@ else:
 
                         if update_submitted:
                             with st.spinner("수정 내용을 반영하는 중입니다..."):
+                                recommendation = "종합 비타민 및 미네랄 보조제"
+                                if "깃털" in edited_status or "탈피" in edited_status:
+                                    recommendation = "단백질 및 케라틴 합성을 위한 아미노산/깃털 전용 영양제, 칼슘제"
+                                elif "기운" in edited_status or "쉰" in edited_status:
+                                    recommendation = "면역력 강화용 유산균 및 비타민 B군"
+
                                 updated_data = {
                                     "date": log['date'],
                                     "status": edited_status,
                                     "memo": edited_memo,
+                                    "recommendation": recommendation
                                 }
                                 db.child("users").child(safe_email).child("care_logs").child(log_key).update(updated_data)
                             st.success("기록이 수정되었습니다!")
@@ -492,3 +522,6 @@ else:
                                 db.child("users").child(safe_email).child("care_logs").child(log_key).remove()
                             st.success("기록이 삭제되었습니다!")
                             st.rerun()
+
+                    st.markdown("---")
+                    st.success(f"💡 **닥터 펫 맞춤 처방 및 추천 영양제:** {log['recommendation']}")
