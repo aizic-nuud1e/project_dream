@@ -1,2 +1,5 @@
 openai
 streamlit
+pyrebase
+extra-streamlit-components
+streamlit-cookies-manager
