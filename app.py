@@ -1,11 +1,100 @@
-import pyrebase
+import requests
 import streamlit as st
 from datetime import datetime
 from openai import OpenAI
 from streamlit_cookies_manager import EncryptedCookieManager
 
 # =========================================================
-# 1. 페이지 기본 설정 및 디자인 테마
+# 1. Pyrebase 대체 호환용 래퍼 클래스 (파이썬 3.14 및 최신 환경 호환)
+# =========================================================
+class MockValue:
+    def __init__(self, data):
+        self._data = data
+    def val(self):
+        return self._data
+
+class DatabaseRef:
+    def __init__(self, db_url, path=""):
+        self.db_url = db_url.rstrip("/")
+        self.path = path
+
+    def child(self, name):
+        new_path = f"{self.path}/{name}" if self.path else name
+        return DatabaseRef(self.db_url, new_path)
+
+    def _get_url(self):
+        return f"{self.db_url}/{self.path}.json"
+
+    def set(self, data):
+        res = requests.put(self._get_url(), json=data)
+        return res.json()
+
+    def push(self, data):
+        res = requests.post(self._get_url(), json=data)
+        return res.json()
+
+    def update(self, data):
+        res = requests.patch(self._get_url(), json=data)
+        return res.json()
+
+    def remove(self):
+        res = requests.delete(self._get_url())
+        return res.json()
+
+    def get(self):
+        res = requests.get(self._get_url())
+        data = res.json()
+        return MockValue(data)
+
+class AuthClient:
+    def __init__(self, api_key):
+        self.api_key = api_key
+
+    def sign_in_with_email_and_password(self, email, password):
+        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={self.api_key}"
+        payload = {"email": email, "password": password, "returnSecureToken": True}
+        res = requests.post(url, json=payload)
+        if res.status_code != 200:
+            raise Exception(res.json().get("error", {}).get("message", "Login failed"))
+        return res.json()
+
+    def create_user_with_email_and_password(self, email, password):
+        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signUp?key={self.api_key}"
+        payload = {"email": email, "password": password, "returnSecureToken": True}
+        res = requests.post(url, json=payload)
+        if res.status_code != 200:
+            raise Exception(res.json().get("error", {}).get("message", "Signup failed"))
+        return res.json()
+
+    def send_email_verification(self, id_token):
+        url = f"https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={self.api_key}"
+        payload = {"requestType": "VERIFY_EMAIL", "idToken": id_token}
+        res = requests.post(url, json=payload)
+        return res.json()
+
+    def refresh(self, refresh_token):
+        url = f"https://securetoken.googleapis.com/v1/token?key={self.api_key}"
+        payload = {"grant_type": "refresh_token", "refresh_token": refresh_token}
+        res = requests.post(url, json=payload)
+        if res.status_code != 200:
+            raise Exception("Token refresh failed")
+        data = res.json()
+        return {
+            "refreshToken": data.get("refresh_token"),
+            "idToken": data.get("id_token"),
+            "userId": data.get("user_id")
+        }
+
+class PyrebaseMock:
+    def __init__(self, config):
+        self.config = config
+    def auth(self):
+        return AuthClient(self.config["apiKey"])
+    def database(self):
+        return DatabaseRef(self.config["databaseURL"])
+
+# =========================================================
+# 2. 페이지 기본 설정 및 디자인 테마
 # =========================================================
 st.set_page_config(
     page_title="닥터 펫: 특수 동물 가상 의료 상담소", 
@@ -77,7 +166,7 @@ st.markdown(
 )
 
 # =========================================================
-# 2. Firebase 및 Upstage API 설정
+# 3. Firebase 및 Upstage API 설정
 # =========================================================
 firebaseConfig = {
     "apiKey": "AIzaSyC7EiUsz6GD807ZWLAnE7YGd7kFw2Qo1hg",
@@ -90,7 +179,7 @@ firebaseConfig = {
     "measurementId": "G-CMLV3V4NVS",
 }
 
-firebase = pyrebase.initialize_app(firebaseConfig)
+firebase = PyrebaseMock(firebaseConfig)
 auth = firebase.auth()
 db = firebase.database()
 
@@ -104,7 +193,7 @@ client = OpenAI(
 )
 
 # =========================================================
-# 3. 로그인 유지용 쿠키 매니저 설정 (st.secrets 제거)
+# 4. 로그인 유지용 쿠키 매니저 설정
 # =========================================================
 cookies = EncryptedCookieManager(
     prefix="doctor_pet/",
@@ -114,7 +203,7 @@ if not cookies.ready():
     st.stop()
 
 # =========================================================
-# 4. 세션 상태 초기화 (+ 쿠키 기반 로그인 복원)
+# 5. 세션 상태 초기화 (+ 쿠키 기반 로그인 복원)
 # =========================================================
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -145,7 +234,7 @@ if not st.session_state.logged_in and not st.session_state.auth_restored:
             cookies.save()
 
 # =========================================================
-# 5. 앱 화면 분기 (로그인 안 됨 -> 로그인 UI / 로그인 됨 -> 메인 앱 UI)
+# 6. 앱 화면 분기 (로그인 안 됨 -> 로그인 UI / 로그인 됨 -> 메인 앱 UI)
 # =========================================================
 if not st.session_state.logged_in:
     st.markdown("<h3 style='text-align: center; margin-bottom: 15px;'>🔐 닥터 펫 로그인</h3>", unsafe_allow_html=True)
